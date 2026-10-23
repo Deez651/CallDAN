@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0e1014">
+<title>BlurCall</title>
+<style>
+:root{--bg:#0e1014;--card:#171a21;--line:#262b36;--txt:#eef1f6;--mut:#8a93a6;--acc:#4f8cff;--red:#ff4757;--grn:#2ed573}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:16px/1.4 system-ui,-apple-system,Roboto,"Segoe UI",sans-serif;overflow:hidden;overscroll-behavior:none}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;gap:14px;padding:calc(28px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));overflow-y:auto}
+.screen.active{display:flex}
+h1{margin:6px 0 0;font-size:28px;text-align:center}
+.logo{font-size:56px;text-align:center;margin-top:7vh}
+.mut{color:var(--mut)}.small{font-size:13px}.center{text-align:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.big{font-size:34px;font-weight:700;letter-spacing:2px;word-break:break-all}
+.inp{width:100%;background:#0f1218;border:1px solid var(--line);border-radius:14px;color:var(--txt);font-size:22px;letter-spacing:2px;padding:14px 16px;outline:none}
+.inp:focus{border-color:var(--acc)}
+.btn{border:0;border-radius:14px;padding:14px 16px;font-size:17px;font-weight:600;color:var(--txt);background:#232834;cursor:pointer}
+.btn:active{opacity:.8}.btn:disabled{opacity:.5}
+.btn.primary{background:var(--acc)}.btn.wide{width:100%}
+.row{display:flex;gap:10px}.row .btn{flex:1;font-size:15px}
+.err{color:var(--red);min-height:20px;font-size:14px}
+.top{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:#ffa502}.dot.ok{background:var(--grn)}
+/* call */
+#s-call{padding:0;gap:0;background:#000;overflow:hidden}
+#remote{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+#local-wrap{position:absolute;top:calc(14px + env(safe-area-inset-top));right:12px;width:30vw;max-width:150px;aspect-ratio:3/4;border-radius:14px;overflow:hidden;border:2px solid rgba(255,255,255,.25);background:#111;z-index:3}
+#local{width:100%;height:100%;object-fit:cover}
+#call-top{position:absolute;left:12px;top:calc(18px + env(safe-area-inset-top));z-index:3;display:flex;flex-direction:column;gap:4px;text-shadow:0 1px 4px #000}
+#call-top b{font-size:18px}
+#fps-badge{font-size:13px;color:#cfd6e4}
+#hint{position:absolute;left:12px;right:12px;top:calc(80px + env(safe-area-inset-top));text-align:center;z-index:3;font-size:14px;background:rgba(0,0,0,.6);border-radius:12px;padding:8px;display:none}
+#calling{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(0,0,0,.6);z-index:2;text-align:center}
+#calling .big{font-size:40px}
+#bar{position:absolute;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:center;gap:14px;padding:16px 12px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.rb{width:58px;height:58px;border-radius:50%;border:0;background:rgba(255,255,255,.18);color:#fff;font-size:24px;cursor:pointer}
+.rb.off{background:#fff;color:#000}.rb.red{background:var(--red)}
+/* sheet */
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:86vh;overflow:auto;background:#12151c;border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;padding:16px 18px calc(24px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .25s;z-index:20;display:flex;flex-direction:column;gap:10px}
+.sheet.open{transform:none}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;font-size:18px}
+.sheet-head button{background:#232834;color:#fff;border:0;border-radius:50%;width:36px;height:36px;font-size:16px}
+.lbl{display:flex;justify-content:space-between;margin-top:6px;color:var(--mut);font-size:14px}
+.lbl span{color:var(--txt)}
+.seg{display:flex;background:#1b1f29;border-radius:12px;padding:3px}
+.seg button{flex:1;border:0;background:none;color:var(--mut);padding:10px 4px;border-radius:10px;font-size:15px}
+.seg button.on{background:var(--acc);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:#1b1f29;color:var(--txt);border-radius:999px;padding:8px 13px;font-size:14px}
+.chip.on{background:var(--acc);border-color:var(--acc)}
+input[type=range]{width:100%;accent-color:var(--acc);margin:6px 0}
+.chk{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--mut)}
+.chk input{margin-top:3px;width:18px;height:18px}
+/* incoming */
+.incoming{position:fixed;inset:0;z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,12,16,.97);text-align:center}
+.incoming.show{display:flex}
+.incoming .row{width:80%;max-width:320px;margin-top:20px}
+.btn.red{background:var(--red)}.btn.green{background:var(--grn);color:#04210f}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:#2a2f3a;color:#fff;padding:11px 16px;border-radius:12px;max-width:90vw;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:50;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+
+<!-- Регистрация -->
+<section id="s-reg" class="screen active">
+  <div class="logo">📹</div>
+  <h1>BlurCall</h1>
+  <p class="mut center">Придумайте номер из цифр. Пока приложение открыто, номер ваш: никто другой не сможет его занять.</p>
+  <input id="reg-input" class="inp" type="text" inputmode="numeric" maxlength="12" placeholder="Например 482913" autocomplete="off">
+  <div id="reg-err" class="err"></div>
+  <button id="reg-btn" class="btn primary wide">Занять номер</button>
+</section>
+
+<!-- Главный экран -->
+<section id="s-home" class="screen">
+  <div class="top"><div class="dot" id="dot"></div><span id="status">Подключение…</span></div>
+  <div class="card">
+    <div class="mut small">Ваш номер</div>
+    <div class="big" id="my-num">—</div>
+    <div class="row"><button id="copy-btn" class="btn">Скопировать</button><button id="logout-btn" class="btn">Сменить номер</button></div>
+  </div>
+  <div class="card">
+    <div class="mut small">Номер друга</div>
+    <input id="friend-input" class="inp" type="text" inputmode="numeric" maxlength="12" placeholder="Его цифры" autocomplete="off">
+    <button id="call-btn" class="btn primary wide">📞 Позвонить</button>
+  </div>
+  <button id="open-settings" class="btn wide">⚙️ Видео и размытие</button>
+  <p class="mut small center">Чтобы друг мог вам позвонить, держите приложение открытым.</p>
+</section>
+
+<!-- Звонок -->
+<section id="s-call" class="screen">
+  <video id="remote" autoplay playsinline></video>
+  <div id="call-top"><b id="call-name"></b><span id="clock"></span><span id="fps-badge"></span></div>
+  <div id="local-wrap"><video id="local" autoplay playsinline muted></video></div>
+  <div id="hint"></div>
+  <div id="calling"><div class="mut">Звоним…</div><div class="big" id="calling-num"></div><div class="mut small">Ждём ответ</div></div>
+  <div id="bar">
+    <button class="rb" id="b-mic" aria-label="Микрофон">🎤</button>
+    <button class="rb" id="b-cam" aria-label="Камера">📷</button>
+    <button class="rb" id="b-flip" aria-label="Сменить камеру">🔄</button>
+    <button class="rb" id="b-set" aria-label="Настройки">⚙️</button>
+    <button class="rb red" id="b-hang" aria-label="Завершить">📞</button>
+  </div>
+</section>
+
+<!-- Настройки -->
+<div id="sheet" class="sheet">
+  <div class="sheet-head"><b>Видео и размытие</b><button id="sheet-close">✕</button></div>
+  <div class="lbl">Что размывать</div>
+  <div class="seg" id="seg-mode">
+    <button data-mode="off">Ничего</button><button data-mode="bg">Фон</button><button data-mode="objects">Объекты</button><button data-mode="screen">Всё</button>
+  </div>
+  <div id="objects-box">
+    <div class="lbl">Выберите объекты</div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="lbl">Сила размытия <span id="blur-val"></span></div>
+  <input type="range" id="blur-range" min="2" max="40">
+  <div class="lbl">Частота кадров (FPS) <span id="fps-val"></span></div>
+  <input type="range" id="fps-range" min="5" max="60">
+  <div class="lbl">Качество видео</div>
+  <div class="seg" id="seg-q"><button data-q="360">360p</button><button data-q="480">480p</button><button data-q="720">720p</button></div>
+  <label class="chk" id="invert-row"><input type="checkbox" id="invert"><span>Инвертировать маску. Включите, если размывается человек, а фон остаётся чётким.</span></label>
+  <div class="mut small">Размытие применяется к вашей картинке: именно её видит друг.</div>
+</div>
+
+<!-- Входящий звонок -->
+<div id="incoming" class="incoming">
+  <div class="mut">Входящий звонок</div>
+  <div class="big" id="in-num"></div>
+  <div class="row"><button id="in-decline" class="btn red">Отклонить</button><button id="in-accept" class="btn green">Принять</button></div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ---------- Константы ---------- */
+const PREFIX = 'blurcall7q-';   // чтобы цифры не пересекались с другими приложениями на общем сервере
+const ICE = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443?transport=tcp'],
+    username: 'openrelayproject', credential: 'openrelayproject' }
+];
+const OBJ_CHIPS = [
+  ['face', 'Лицо'], ['person', 'Человек целиком'], ['cell phone', 'Телефон'], ['laptop', 'Ноутбук'],
+  ['tv', 'Монитор / ТВ'], ['book', 'Книга'], ['cup', 'Чашка'], ['bottle', 'Бутылка'],
+  ['keyboard', 'Клавиатура'], ['mouse', 'Мышь'], ['remote', 'Пульт'], ['cat', 'Кот'],
+  ['dog', 'Собака'], ['chair', 'Стул'], ['couch', 'Диван'], ['bed', 'Кровать'],
+  ['clock', 'Часы'], ['backpack', 'Рюкзак'], ['handbag', 'Сумка'], ['potted plant', 'Растение']
+];
+const GCS = 'https://storage.googleapis.com/mediapipe-models/';
+const MODEL_FILES = {
+  seg:  [GCS + 'image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'],
+  obj:  [GCS + 'object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite'],
+  face: [GCS + 'face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite']
+};
+
+/* ---------- Утилиты ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+let toastT;
+function toast(msg, ms = 3200) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+function show(id) { $$('.screen').forEach(s => s.classList.toggle('active', s.id === id)); }
+const fmtId = id => String(id).replace(PREFIX, '');
+const SUP_FILTER = typeof CanvasRenderingContext2D !== 'undefined' && 'filter' in CanvasRenderingContext2D.prototype;
+
+/* ---------- Настройки ---------- */
+const DEF = { mode: 'off', blur: 16, fps: 24, quality: 480, objects: ['face'], invert: false };
+const S = Object.assign({}, DEF, store.get('bc_settings', {}));
+if (!Array.isArray(S.objects)) S.objects = ['face'];
+let selSet = new Set(S.objects);
+
+function syncUI() {
+  $$('#seg-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  $$('#seg-q button').forEach(b => b.classList.toggle('on', +b.dataset.q === S.quality));
+  $$('#chips .chip').forEach(c => c.classList.toggle('on', selSet.has(c.dataset.k)));
+  $('#objects-box').style.display = S.mode === 'objects' ? '' : 'none';
+  $('#invert-row').style.display = (S.mode === 'bg' || (S.mode === 'objects' && selSet.has('person'))) ? '' : 'none';
+  $('#blur-range').value = S.blur; $('#blur-val').textContent = S.blur;
+  $('#fps-range').value = S.fps; $('#fps-val').textContent = S.fps + ' к/с';
+  $('#invert').checked = !!S.invert;
+}
+function onSettingsChanged(applyQ, applyF) {
+  selSet = new Set(S.objects);
+  store.set('bc_settings', S);
+  for (const k of Object.keys(P.state)) if (P.state[k] === 'error') delete P.state[k]; // даём шанс загрузить модель заново
+  syncUI();
+  if (applyQ) applyQuality();
+  if (applyF) applyFps();
+}
+function buildSettingsUI() {
+  const chips = $('#chips');
+  OBJ_CHIPS.forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.k = k; b.textContent = label;
+    b.onclick = () => { const i = S.objects.indexOf(k); if (i >= 0) S.objects.splice(i, 1); else S.objects.push(k); onSettingsChanged(); };
+    chips.appendChild(b);
+  });
+  $$('#seg-mode button').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; onSettingsChanged(); });
+  $$('#seg-q button').forEach(b => b.onclick = () => { S.quality = +b.dataset.q; onSettingsChanged(true); });
+  $('#blur-range').oninput = e => { S.blur = +e.target.value; onSettingsChanged(); };
+  $('#fps-range').oninput = e => { S.fps = +e.target.value; onSettingsChanged(false, true); };
+  $('#invert').onchange = e => { S.invert = e.target.checked; onSettingsChanged(); };
+  const open = () => $('#sheet').classList.add('open');
+  const close = () => $('#sheet').classList.remove('open');
+  $('#open-settings').onclick = open; $('#b-set').onclick = open; $('#sheet-close').onclick = close;
+  syncUI();
+}
+
+/* ---------- Сеть: PeerJS ---------- */
+let peer = null, myDigits = null, ctrl = null, currentCall = null, incoming = null;
+let callState = 'idle', callTimer = 0, clockT = 0, clockStart = 0;
+
+function setStatus(text, ok) { $('#status').textContent = text; $('#dot').classList.toggle('ok', !!ok); }
+function peerOpts() { return Object.assign({ debug: 0 }, window.__PEER_OPTS || {}, { config: { iceServers: ICE } }); }
+
+function createPeer(digits) {
+  return new Promise((resolve, reject) => {
+    let opened = false, done = false;
+    const p = new Peer(PREFIX + digits, peerOpts());
+    const fail = e => { if (done) return; done = true; clearTimeout(tm); try { p.destroy(); } catch {} reject(e); };
+    const tm = setTimeout(() => fail({ type: 'timeout' }), 15000);
+    p.on('open', () => {
+      if (!done) { opened = true; done = true; clearTimeout(tm); resolve(p); }
+      else if (opened) setStatus('В сети', true);
+    });
+    p.on('error', e => { if (!opened) fail(e); else onPeerError(p, e); });
+    p.on('disconnected', () => { if (opened) onPeerDisconnected(p); });
+    p.on('call', onIncomingCall);
+    p.on('connection', onIncomingConn);
+  });
+}
+async function connectWithRetry(digits, tries) {
+  for (let i = 0; i < tries; i++) {
+    try { return await createPeer(digits); }
+    catch (e) { if (e && e.type === 'unavailable-id' && i < tries - 1) { await sleep(2500); continue; } throw e; }
+  }
+}
+function regErrText(e) {
+  const t = e && e.type;
+  if (t === 'unavailable-id') return 'Эти цифры уже заняты. Введите другие.';
+  if (t === 'timeout' || t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed')
+    return 'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.';
+  return 'Ошибка: ' + (t || e);
+}
+function onPeerDisconnected(p) {
+  setStatus('Нет связи, переподключаюсь…', false);
+  setTimeout(() => { if (peer === p && !p.destroyed && p.disconnected) { try { p.reconnect(); } catch {} } }, 2000);
+}
+function onPeerError(p, e) {
+  const t = e && e.type;
+  if (t === 'peer-unavailable') { if (callState === 'calling') endCall('Друг не в сети или не открыл приложение'); return; }
+  if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') { setStatus('Нет связи с сервером', false); return; }
+  if (t === 'webrtc' || t === 'negotiation' || t === 'connection') { if (callState !== 'idle') endCall('Ошибка соединения'); return; }
+  console.warn('peer error', e);
+}
+
+$('#reg-btn').onclick = async () => {
+  const digits = $('#reg-input').value.replace(/\D/g, '');
+  const err = $('#reg-err'); err.textContent = '';
+  if (digits.length < 4 || digits.length > 12) { err.textContent = 'Нужно от 4 до 12 цифр.'; return; }
+  const btn = $('#reg-btn'); btn.disabled = true; btn.textContent = 'Проверяю…';
+  try {
+    peer = await createPeer(digits);
+    myDigits = digits; store.set('bc_digits', digits);
+    $('#my-num').textContent = digits; setStatus('В сети', true); show('s-home');
+  } catch (e) { err.textContent = regErrText(e); }
+  btn.disabled = false; btn.textContent = 'Занять номер';
+};
+$('#reg-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('#reg-btn').click(); });
+$('#friend-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('#call-btn').click(); });
+$('#copy-btn').onclick = async () => { try { await navigator.clipboard.writeText(myDigits || ''); toast('Номер скопирован'); } catch { toast('Не удалось скопировать'); } };
+$('#logout-btn').onclick = () => {
+  if (callState !== 'idle') return;
+  try { peer && peer.destroy(); } catch {}
+  peer = null; myDigits = null; store.del('bc_digits'); $('#reg-input').value = ''; $('#reg-err').textContent = ''; show('s-reg');
+};
+
+/* управляющий канал: быстрые сигналы «отбой / отклонил / отмена» */
+function sendCtrl(m) { try { if (ctrl && ctrl.open) ctrl.send(m); } catch {} }
+function wireCtrl(c) {
+  c.on('data', d => {
+    if (c !== ctrl || !d) return;
+    if (d.t === 'hangup') endCall('Друг завершил звонок');
+    else if (d.t === 'decline') endCall('Друг отклонил звонок');
+    else if (d.t === 'cancel') dismissIncoming('Пропущенный звонок');
+  });
+  c.on('close', () => {
+    if (c !== ctrl) return;
+    ctrl = null;
+    if (incoming) dismissIncoming('Пропущенный звонок');
+    else if (callState !== 'idle') endCall('Звонок завершён');
+  });
+  c.on('error', () => {});
+}
+function onIncomingConn(c) { if (ctrl) { try { c.close(); } catch {} return; } ctrl = c; wireCtrl(c); }
+
+function onIncomingCall(call) {
+  if (callState !== 'idle' || incoming) { try { call.close(); } catch {} return; }
+  incoming = call;
+  $('#in-num').textContent = fmtId(call.peer);
+  $('#incoming').classList.add('show');
+  try { navigator.vibrate && navigator.vibrate([500, 250, 500, 250, 500]); } catch {}
+  call.on('close', () => { if (incoming === call) dismissIncoming('Пропущенный звонок'); });
+}
+function dismissIncoming(msg) {
+  incoming = null; $('#incoming').classList.remove('show');
+  if (msg) toast(msg);
+  if (ctrl && !currentCall) { try { ctrl.close(); } catch {} ctrl = null; }
+}
+$('#in-decline').onclick = () => {
+  const call = incoming; if (!call) return;
+  incoming = null; $('#incoming').classList.remove('show');
+  sendCtrl({ t: 'decline' });
+  setTimeout(() => { try { call.close(); } catch {} if (ctrl) { try { ctrl.close(); } catch {} ctrl = null; } }, 250);
+};
+$('#in-accept').onclick = async () => {
+  const call = incoming; if (!call) return;
+  incoming = null; $('#incoming').classList.remove('show');
+  try { await startMedia(); }
+  catch (e) {
+    sendCtrl({ t: 'decline' });
+    setTimeout(() => { try { call.close(); } catch {} }, 250);
+    toast('Нет доступа к камере или микрофону. Разрешите их в настройках телефона.', 5000); return;
+  }
+  callState = 'active'; setupCall(call); call.answer(outStream);
+  enterCallScreen(fmtId(call.peer), false);
+};
+
+function setupCall(call) {
+  currentCall = call;
+  call.on('stream', rs => {
+    const r = $('#remote');
+    if (r.srcObject !== rs) { r.srcObject = rs; r.play().catch(() => {}); }
+    if (callState === 'calling') { callState = 'active'; clearTimeout(callTimer); $('#calling').style.display = 'none'; startClock(); }
+    else if (!clockT) startClock();
+  });
+  call.on('close', () => { if (currentCall === call && callState !== 'idle') endCall('Звонок завершён'); });
+  call.on('error', () => { if (currentCall === call) endCall('Ошибка соединения'); });
+}
+function enterCallScreen(name, calling) {
+  show('s-call');
+  $('#call-name').textContent = name; $('#calling-num').textContent = name;
+  $('#calling').style.display = calling ? 'flex' : 'none';
+  $('#clock').textContent = ''; $('#fps-badge').textContent = '';
+  if (!calling) startClock();
+}
+function startClock() {
+  clearInterval(clockT); clockStart = Date.now();
+  const tick = () => { const s = Math.floor((Date.now() - clockStart) / 1000); $('#clock').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+  tick(); clockT = setInterval(tick, 1000);
+}
+async function startCall(id) {
+  if (callState !== 'idle') return;
+  try { await startMedia(); }
+  catch (e) { toast('Нет доступа к камере или микрофону. Разрешите их в настройках телефона.', 5000); return; }
+  if (!peer || peer.destroyed || peer.disconnected) { stopMedia(); toast('Нет связи с сервером. Подождите секунду и повторите.'); return; }
+  callState = 'calling';
+  enterCallScreen(id, true);
+  ctrl = peer.connect(PREFIX + id, { reliable: true }); wireCtrl(ctrl);
+  setupCall(peer.call(PREFIX + id, outStream));
+  callTimer = setTimeout(() => { if (callState === 'calling') { sendCtrl({ t: 'cancel' }); endCall('Нет ответа'); } }, 40000);
+}
+function endCall(msg) {
+  if (callState === 'idle' && !currentCall && !ctrl) { if (msg) toast(msg); return; }
+  callState = 'idle'; clearTimeout(callTimer); clearInterval(clockT); clockT = 0;
+  const c = currentCall, k = ctrl; currentCall = null; ctrl = null;
+  try { c && c.close(); } catch {}
+  try { k && k.close(); } catch {}
+  $('#remote').srcObject = null;
+  $('#sheet').classList.remove('open');
+  stopMedia();
+  show('s-home');
+  if (msg) toast(msg);
+}
+$('#call-btn').onclick = () => {
+  const id = $('#friend-input').value.replace(/\D/g, '');
+  if (id.length < 4) { toast('Введите цифры друга'); return; }
+  if (id === myDigits) { toast('Это ваш собственный номер'); return; }
+  startCall(id);
+};
+$('#b-hang').onclick = () => {
+  sendCtrl({ t: callState === 'calling' ? 'cancel' : 'hangup' });
+  setTimeout(() => endCall(), 150);
+};
+
+/* ---------- Камера и обработка кадра ---------- */
+let camStream = null, outStream = null, outTrack = null, facing = 'user';
+let camOff = false, micOn = true, running = false, rafId = 0, nextDue = 0, lastVT = -1, reqFrameOK = false, wake = null;
+let fpsCount = 0, fpsT = 0;
+const camVideo = document.createElement('video');
+camVideo.muted = true; camVideo.playsInline = true; camVideo.setAttribute('playsinline', '');
+camVideo.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+document.body.appendChild(camVideo);
+const outCanvas = document.createElement('canvas');
+const octx = outCanvas.getContext('2d', { alpha: false });
+const blurC = document.createElement('canvas'), blurX = blurC.getContext('2d');
+const cutC = document.createElement('canvas'), cutX = cutC.getContext('2d');
+
+const P = { state: {}, seg: null, obj: null, face: null, ts: { seg: 0, obj: 0, face: 0 },
+  maskC: document.createElement('canvas'), maskImg: null, maskValid: false,
+  boxes: [], seenAt: 0, lastDet: 0, lastSeg: 0, detMs: 0, segMs: 0, errs: 0 };
+P.maskX = P.maskC.getContext('2d');
+
+function videoConstraints() {
+  const q = S.quality;
+  return { facingMode: facing, width: { ideal: Math.round(q * 16 / 9) }, height: { ideal: q }, frameRate: { ideal: Math.min(30, Math.max(15, S.fps)) } };
+}
+async function startMedia() {
+  if (outStream) return;
+  const raw = await navigator.mediaDevices.getUserMedia({ video: videoConstraints(), audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  camStream = new MediaStream(raw.getVideoTracks());
+  const audio = raw.getAudioTracks();
+  audio.forEach(t => { t.enabled = micOn; });
+  camVideo.srcObject = camStream; await camVideo.play().catch(() => {});
+  reqFrameOK = typeof CanvasCaptureMediaStreamTrack !== 'undefined' && 'requestFrame' in CanvasCaptureMediaStreamTrack.prototype;
+  outCanvas.width = camVideo.videoWidth || 640; outCanvas.height = camVideo.videoHeight || 480;
+  octx.fillStyle = '#000'; octx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+  const cs = outCanvas.captureStream(reqFrameOK ? 0 : Math.min(S.fps, 30));
+  outTrack = cs.getVideoTracks()[0];
+  outStream = new MediaStream([outTrack, ...audio]);
+  const lv = $('#local'); lv.srcObject = outStream; lv.play().catch(() => {});
+  lv.style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
+  updateBarButtons();
+  running = true; nextDue = 0; lastVT = -1; fpsCount = 0; fpsT = performance.now();
+  rafId = requestAnimationFrame(render);
+  applyFps();
+  try { wake = await navigator.wakeLock.request('screen'); } catch {}
+}
+function stopMedia() {
+  running = false; cancelAnimationFrame(rafId);
+  try { camStream && camStream.getTracks().forEach(t => t.stop()); } catch {}
+  try { outStream && outStream.getTracks().forEach(t => t.stop()); } catch {}
+  camStream = outStream = outTrack = null;
+  camVideo.srcObject = null; $('#local').srcObject = null;
+  camOff = false; micOn = true; P.maskValid = false; P.boxes = [];
+  try { wake && wake.release(); } catch {} wake = null;
+  hint();
+}
+function updateBarButtons() {
+  $('#b-mic').textContent = micOn ? '🎤' : '🔇'; $('#b-mic').classList.toggle('off', !micOn);
+  $('#b-cam').textContent = camOff ? '🚫' : '📷'; $('#b-cam').classList.toggle('off', camOff);
+}
+$('#b-mic').onclick = () => { micOn = !micOn; if (outStream) outStream.getAudioTracks().forEach(t => { t.enabled = micOn; }); updateBarButtons(); };
+$('#b-cam').onclick = () => { camOff = !camOff; updateBarButtons(); };
+$('#b-flip').onclick = async () => {
+  if (!camStream) return;
+  const prev = facing; facing = facing === 'user' ? 'environment' : 'user';
+  try {
+    const ns = await navigator.mediaDevices.getUserMedia({ video: videoConstraints(), audio: false });
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = ns; camVideo.srcObject = ns; lastVT = -1; await camVideo.play().catch(() => {});
+    $('#local').style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
+  } catch (e) { facing = prev; toast('Не удалось переключить камеру'); }
+};
+function applyQuality() {
+  const t = camStream && camStream.getVideoTracks()[0]; if (!t) return;
+  t.applyConstraints({ width: { ideal: Math.round(S.quality * 16 / 9) }, height: { ideal: S.quality } }).catch(() => toast('Камера не поддерживает такое качество'));
+}
+function applyFps() {
+  const t = camStream && camStream.getVideoTracks()[0]; if (!t) return;
+  t.applyConstraints({ frameRate: { ideal: S.fps } }).catch(() => {});
+}
+function hint(text) {
+  const h = $('#hint');
+  const loading = Object.values(P.state).includes('loading');
+  h.textContent = text || (loading ? 'Загружаю модель распознавания… пока картинка полностью размыта' : '');
+  h.style.display = h.textContent ? 'block' : 'none';
+}
+
+/* модели MediaPipe */
+let visionP = null;
+function getVision() {
+  if (!visionP) visionP = (async () => {
+    const mod = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const fs = await mod.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    return { mod, fs };
+  })();
+  visionP.catch(() => { visionP = null; });
+  return visionP;
+}
+async function loadModel(key) {
+  const { mod, fs } = await getVision();
+  let last;
+  for (const path of MODEL_FILES[key]) {
+    try {
+      const base = { modelAssetPath: path, delegate: 'CPU' };
+      if (key === 'seg') return await mod.ImageSegmenter.createFromOptions(fs, { baseOptions: base, runningMode: 'VIDEO', outputCategoryMask: true, outputConfidenceMasks: false });
+      if (key === 'obj') return await mod.ObjectDetector.createFromOptions(fs, { baseOptions: base, runningMode: 'VIDEO', scoreThreshold: 0.3, maxResults: 20 });
+      if (key === 'face') return await mod.FaceDetector.createFromOptions(fs, { baseOptions: base, runningMode: 'VIDEO', minDetectionConfidence: 0.4 });
+    } catch (e) { last = e; console.warn('model load failed:', path, e); }
+  }
+  throw last;
+}
+function ensure(key) {
+  if (P.state[key]) return;
+  P.state[key] = 'loading'; hint();
+  loadModel(key).then(m => { P[key] = m; P.state[key] = 'ready'; hint(); })
+    .catch(e => { console.error(e); P.state[key] = 'error'; hint(); toast('Не удалось загрузить модель распознавания. Нужен интернет.', 5000); });
+}
+function modelFailed(key, e) {
+  console.error(key, e); P[key] = null; P.state[key] = 'error'; toast('Сбой модели распознавания, картинка размыта целиком.', 4500);
+}
+const tsFor = k => { const t = Math.max(Math.floor(performance.now()), P.ts[k] + 1); P.ts[k] = t; return t; };
+
+function segStep(now) {
+  if (now - P.lastSeg < Math.max(33, P.segMs * 1.2)) return;
+  P.lastSeg = now; const t0 = performance.now();
+  try {
+    P.seg.segmentForVideo(camVideo, tsFor('seg'), res => {
+      const m = res && res.categoryMask; if (!m) return;
+      const w = m.width, h = m.height, data = m.getAsUint8Array();
+      if (P.maskC.width !== w || P.maskC.height !== h || !P.maskImg) { P.maskC.width = w; P.maskC.height = h; P.maskImg = P.maskX.createImageData(w, h); }
+      const px = P.maskImg.data, inv = !!S.invert;
+      for (let i = 0, j = 0; i < data.length; i++, j += 4) { px[j] = px[j + 1] = px[j + 2] = 255; px[j + 3] = ((data[i] > 0) !== inv) ? 255 : 0; }
+      P.maskX.putImageData(P.maskImg, 0, 0); P.maskValid = true;
+    });
+  } catch (e) { modelFailed('seg', e); }
+  P.segMs = performance.now() - t0;
+}
+function detStep(now, needFace, needObj) {
+  if (now - P.lastDet < Math.max(110, P.detMs * 1.3)) return;
+  P.lastDet = now; const t0 = performance.now(); const found = [];
+  if (needFace && P.face) {
+    try { for (const d of P.face.detectForVideo(camVideo, tsFor('face')).detections) { const b = d.boundingBox; found.push({ kind: 'face', x: b.originX, y: b.originY, w: b.width, h: b.height }); } }
+    catch (e) { modelFailed('face', e); }
+  }
+  if (needObj && P.obj) {
+    try {
+      for (const d of P.obj.detectForVideo(camVideo, tsFor('obj')).detections) {
+        const c = d.categories && d.categories[0]; if (!c || !selSet.has(String(c.categoryName).toLowerCase())) continue;
+        const b = d.boundingBox; found.push({ kind: 'obj', x: b.originX, y: b.originY, w: b.width, h: b.height });
+      }
+    } catch (e) { modelFailed('obj', e); }
+  }
+  P.detMs = performance.now() - t0;
+  if (found.length) { P.boxes = found; P.seenAt = now; } else if (now - P.seenAt > 350) P.boxes = [];
+}
+
+function makeBlur(w, h) {
+  const sc = SUP_FILTER ? 0.25 : Math.max(0.03, 1 / (1 + S.blur / 2));
+  const bw = Math.max(8, Math.round(w * sc)), bh = Math.max(8, Math.round(h * sc));
+  if (blurC.width !== bw || blurC.height !== bh) { blurC.width = bw; blurC.height = bh; }
+  blurX.filter = 'none'; blurX.drawImage(camVideo, 0, 0, bw, bh);
+  if (SUP_FILTER) { blurX.filter = 'blur(' + (S.blur * sc * h / 480).toFixed(2) + 'px)'; blurX.drawImage(camVideo, 0, 0, bw, bh); blurX.filter = 'none'; }
+  return blurC;
+}
+function cut(src, w, h) {   // оставляет только силуэт человека
+  if (cutC.width !== w || cutC.height !== h) { cutC.width = w; cutC.height = h; }
+  cutX.globalCompositeOperation = 'source-over'; cutX.filter = 'none';
+  cutX.clearRect(0, 0, w, h); cutX.drawImage(src, 0, 0, w, h);
+  cutX.globalCompositeOperation = 'destination-in';
+  if (SUP_FILTER) cutX.filter = 'blur(2px)';
+  cutX.drawImage(P.maskC, 0, 0, w, h);
+  cutX.filter = 'none'; cutX.globalCompositeOperation = 'source-over';
+  return cutC;
+}
+
+function draw(now) {
+  const w = camVideo.videoWidth, h = camVideo.videoHeight;
+  if (outCanvas.width !== w || outCanvas.height !== h) { outCanvas.width = w; outCanvas.height = h; }
+  if (camOff) { octx.fillStyle = '#000'; octx.fillRect(0, 0, w, h); return; }
+  const mode = S.mode;
+  const needSeg = mode === 'bg' || (mode === 'objects' && selSet.has('person'));
+  const needFace = mode === 'objects' && selSet.has('face');
+  const needObj = mode === 'objects' && [...selSet].some(k => k !== 'face' && k !== 'person');
+  let ready = true;
+  if (needSeg) { ensure('seg'); if (P.seg) segStep(now); ready = ready && !!P.seg && P.maskValid; }
+  if (needFace) { ensure('face'); ready = ready && !!P.face; }
+  if (needObj) { ensure('obj'); ready = ready && !!P.obj; }
+  if ((needFace || needObj) && ready) detStep(now, needFace, needObj);
+
+  if (mode === 'off') { octx.drawImage(camVideo, 0, 0, w, h); return; }
+  if (mode === 'screen' || !ready) { octx.drawImage(makeBlur(w, h), 0, 0, w, h); return; }
+  if (mode === 'bg') { octx.drawImage(makeBlur(w, h), 0, 0, w, h); octx.drawImage(cut(camVideo, w, h), 0, 0, w, h); return; }
+  // mode === 'objects'
+  octx.drawImage(camVideo, 0, 0, w, h);
+  if (!selSet.size) return;
+  const bc = makeBlur(w, h);
+  if (needSeg) octx.drawImage(cut(bc, w, h), 0, 0, w, h);
+  if (P.boxes.length) {
+    octx.save(); octx.beginPath();
+    for (const b of P.boxes) {
+      if (b.kind === 'face') { const cx = b.x + b.w / 2, cy = b.y + b.h / 2, rx = b.w * 0.68, ry = b.h * 0.75; octx.moveTo(cx + rx, cy); octx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); }
+      else { const px = b.w * 0.08, py = b.h * 0.08; octx.rect(b.x - px, b.y - py, b.w + 2 * px, b.h + 2 * py); }
+    }
+    octx.clip(); octx.drawImage(bc, 0, 0, w, h); octx.restore();
+  }
+}
+function render(now) {
+  if (!running) return;
+  rafId = requestAnimationFrame(render);
+  const iv = 1000 / S.fps;
+  if (now < nextDue - 1) return;
+  if (camVideo.readyState < 2 || !camVideo.videoWidth) return;
+  const vt = camVideo.currentTime;
+  if (!camOff && vt === lastVT) return;        // новый кадр с камеры ещё не пришёл
+  lastVT = vt;
+  nextDue = (now - nextDue > iv * 2) ? now + iv : nextDue + iv;
+  try { draw(now); P.errs = 0; }
+  catch (e) {
+    console.error(e);
+    if (++P.errs > 8) { S.mode = 'off'; store.set('bc_settings', S); syncUI(); toast('Ошибка обработки видео: размытие выключено', 5000); P.errs = 0; }
+  }
+  if (reqFrameOK && outTrack && outTrack.requestFrame) outTrack.requestFrame();
+  fpsCount++;
+  if (now - fpsT >= 1000) { $('#fps-badge').textContent = fpsCount + ' к/с'; fpsCount = 0; fpsT = now; }
+}
+
+/* ---------- Запуск ---------- */
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible') return;
+  if (running && !wake) { try { wake = await navigator.wakeLock.request('screen'); } catch {} }
+  if (!myDigits) return;
+  if (!peer || peer.destroyed) {
+    setStatus('Подключение…', false);
+    try { peer = await connectWithRetry(myDigits, 3); setStatus('В сети', true); } catch { setStatus('Нет связи с сервером', false); }
+  } else if (peer.disconnected) { try { peer.reconnect(); } catch {} }
+});
+
+async function boot() {
+  buildSettingsUI();
+  const saved = store.get('bc_digits', null);
+  if (!saved) return;
+  show('s-home'); $('#my-num').textContent = saved; setStatus('Подключение…', false);
+  try { peer = await connectWithRetry(saved, 4); myDigits = saved; setStatus('В сети', true); }
+  catch (e) { show('s-reg'); $('#reg-input').value = saved; $('#reg-err').textContent = regErrText(e); }
+}
+window.__bc = { S, P, state: () => ({ callState, running, peerId: peer && peer.id }) };
+boot();
+})();
+</script>
+</body>
+</html>
